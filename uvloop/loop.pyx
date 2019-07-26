@@ -449,11 +449,12 @@ cdef class Loop:
         if self._closed == 1:
             raise RuntimeError('unable to start the loop; it was closed')
 
-        if self._running == 1:
-            raise RuntimeError('this event loop is already running.')
+        # if self._running == 1:
+        #     raise RuntimeError('this event loop is already running.')
 
         if (aio_get_running_loop is not None and
-                aio_get_running_loop() is not None):
+                aio_get_running_loop() is not None and
+                aio_get_running_loop() != self):
             raise RuntimeError(
                 'Cannot run the event loop while another loop is running')
 
@@ -462,34 +463,39 @@ cdef class Loop:
 
         self._thread_id = PyThread_get_thread_ident()
         self._thread_is_main = MAIN_THREAD_ID == self._thread_id
+        was_running = self._running
         self._running = 1
 
-        self.handler_check__exec_writes.start()
-        self.handler_idle.start()
+        if not was_running:
+            self.handler_check__exec_writes.start()
+            self.handler_idle.start()
 
-        self._recv_signals_start()
+            self._recv_signals_start()
 
-        if aio_set_running_loop is not None:
-            aio_set_running_loop(self)
+            if aio_set_running_loop is not None:
+                aio_set_running_loop(self)
         try:
             self.__run(mode)
         finally:
-            if aio_set_running_loop is not None:
-                aio_set_running_loop(None)
+            if not was_running:
+                if aio_set_running_loop is not None:
+                    aio_set_running_loop(None)
 
-            self._recv_signals_stop()
+                self._recv_signals_stop()
 
-            self.handler_check__exec_writes.stop()
-            self.handler_idle.stop()
+                self.handler_check__exec_writes.stop()
+                self.handler_idle.stop()
 
-            self._thread_is_main = 0
-            self._thread_id = 0
-            self._running = 0
-            self._stopping = 0
+                self._thread_is_main = 0
+                self._thread_id = 0
+                self._running = 0
+                self._stopping = 0
 
         if self._last_error is not None:
             # The loop was stopped with an error with 'loop._stop(error)' call
-            raise self._last_error
+            error = self._last_error
+            self._last_error = None
+            raise error
 
     cdef _close(self):
         cdef int err
@@ -1354,7 +1360,8 @@ cdef class Loop:
         """
         self._check_closed()
         if self._task_factory is None:
-            task = aio_Task(coro, loop=self)
+            # task = aio_Task(coro, loop=self)
+            task = Task(coro, loop=self)
         else:
             task = self._task_factory(self, coro)
         return task
@@ -1378,6 +1385,18 @@ cdef class Loop:
         return self._task_factory
 
     def run_until_complete(self, future):
+        if self.is_running():
+            self._check_closed()
+            f = asyncio.ensure_future(future)
+            if f is not future:
+                f._log_destroy_pending = False
+            while not f.done():
+                self._run(uv.UV_RUN_ONCE)
+            return f.result()
+        else:
+            return self._run_until_complete(future)
+
+    def _run_until_complete(self, future):
         """Run until the Future is done.
 
         If the argument is a coroutine, it is wrapped in a Task.
@@ -3110,6 +3129,7 @@ include "sslproto.pyx"
 include "handles/udp.pyx"
 
 include "server.pyx"
+include "tasks.pyx"
 
 
 # Used in UVProcess
