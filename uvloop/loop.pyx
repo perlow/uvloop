@@ -1039,7 +1039,7 @@ cdef class Loop:
         err = system.setsockopt(
             fd,
             uv.SOL_SOCKET,
-            SO_REUSEPORT,
+            uv.SO_REUSEPORT,
             <char*>&reuseport_flag,
             sizeof(reuseport_flag))
 
