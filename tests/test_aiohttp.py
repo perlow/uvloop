@@ -13,6 +13,10 @@ import weakref
 from uvloop import _testbase as tb
 
 
+# Need to patch aiohttp
+skip_tests = True
+
+
 class _TestAioHTTP:
 
     def test_aiohttp_basic_1(self):

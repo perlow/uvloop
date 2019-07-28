@@ -2,6 +2,7 @@
 
 import asyncio
 
+import uvloop
 from uvloop import _testbase as tb
 
 
@@ -27,16 +28,9 @@ def format_coroutine(qualname, state, src, source_traceback, generator=False):
         return 'coro=<%s() %s at %s>' % (qualname, state, src)
 
 
-try:
-    all_tasks = asyncio.all_tasks
-except AttributeError:
-    all_tasks = asyncio.Task.all_tasks
+all_tasks = uvloop.loop.Task.all_tasks
 
-
-try:
-    current_task = asyncio.current_task
-except AttributeError:
-    current_task = asyncio.Task.current_task
+current_task = uvloop.loop.Task.current_task
 
 
 class _TestTasks:
@@ -362,25 +356,25 @@ class Test_UV_UV_Tasks(_TestTasks, tb.UVTestCase):
         return self.loop.create_task(coro)
 
 
-class Test_UV_UV_Tasks_AIO_Future(_TestTasks, tb.UVTestCase):
-    def create_future(self):
-        return asyncio.Future(loop=self.loop)
-
-    def create_task(self, coro):
-        return self.loop.create_task(coro)
-
-
-class Test_UV_AIO_Tasks(_TestTasks, tb.UVTestCase):
-    def create_future(self):
-        return asyncio.Future(loop=self.loop)
-
-    def create_task(self, coro):
-        return asyncio.Task(coro, loop=self.loop)
-
-
-class Test_AIO_Tasks(_TestTasks, tb.AIOTestCase):
-    def create_future(self):
-        return asyncio.Future(loop=self.loop)
-
-    def create_task(self, coro):
-        return asyncio.Task(coro, loop=self.loop)
+# class Test_UV_UV_Tasks_AIO_Future(_TestTasks, tb.UVTestCase):
+#     def create_future(self):
+#         return asyncio.Future(loop=self.loop)
+#
+#     def create_task(self, coro):
+#         return self.loop.create_task(coro)
+#
+#
+# class Test_UV_AIO_Tasks(_TestTasks, tb.UVTestCase):
+#     def create_future(self):
+#         return asyncio.Future(loop=self.loop)
+#
+#     def create_task(self, coro):
+#         return asyncio.Task(coro, loop=self.loop)
+#
+#
+# class Test_AIO_Tasks(_TestTasks, tb.AIOTestCase):
+#     def create_future(self):
+#         return asyncio.Future(loop=self.loop)
+#
+#     def create_task(self, coro):
+#         return asyncio.Task(coro, loop=self.loop)

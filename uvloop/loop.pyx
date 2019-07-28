@@ -1421,7 +1421,7 @@ cdef class Loop:
     def run_until_complete(self, future):
         if self.is_running():
             self._check_closed()
-            f = asyncio.ensure_future(future)
+            f = aio_ensure_future(future)
             if f is not future:
                 f._log_destroy_pending = False
             while not f.done():

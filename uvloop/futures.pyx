@@ -1,11 +1,18 @@
 __all__ = ['Future']
 
+import collections.abc
 import sys
 import traceback
 
-from asyncio import base_futures
-from asyncio import compat
+from . import base_futures
 from asyncio import events
+
+try:
+    from asyncio import compat
+except:
+    compat = None
+
+
 
 CancelledError = base_futures.CancelledError
 InvalidStateError = base_futures.InvalidStateError
@@ -116,7 +123,7 @@ cdef class Future:
 
     cdef public str _state
     cdef public object _result
-    cdef public Exception _exception
+    cdef public object _exception
     cdef public object _loop
     cdef public object _source_traceback
     cdef public list _callbacks
@@ -129,9 +136,17 @@ cdef class Future:
     # - It is set by __iter__() below so that Task._step() can tell
     #   the difference between `yield from Future()` (correct) vs.
     #   `yield Future()` (incorrect).
-    cdef int _asyncio_future_blocking
+    cdef object __asyncio_future_blocking
 
-    cdef int _log_traceback
+    cdef public int _log_traceback
+
+    def __cinit__(self):
+        self._state = _PENDING
+        self._result = None
+        self._exception = None
+        self._loop = None
+        self._source_traceback = None
+        self.__asyncio_future_blocking = False
 
     def __init__(self, *, loop=None):
         """Initialize the future.
@@ -140,18 +155,13 @@ cdef class Future:
         loop object used by the future. If it's not provided, the future uses
         the default event loop.
         """
-        self._state = _PENDING
-        self._result = None
-        self._exception = None
-        self._loop = None
-        self._source_traceback = None
         if loop is None:
             self._loop = events.get_event_loop()
         else:
             self._loop = loop
         self._callbacks = []
         if self._loop.get_debug():
-            self._source_traceback = events.extract_stack(sys._getframe(1))
+            self._source_traceback = traceback.extract_stack(sys._getframe(1))
 
     _repr_info = base_futures._future_repr_info
 
@@ -161,7 +171,7 @@ cdef class Future:
     # On Python 3.3 and older, objects with a destructor part of a reference
     # cycle are never destroyed. It's not more the case on Python 3.4 thanks
     # to the PEP 442.
-    if compat.PY34:
+    if compat and compat.PY34:
         def __del__(self):
             if not self._log_traceback:
                 # set_exception() was not called, or result() or exception()
@@ -178,7 +188,15 @@ cdef class Future:
                 context['source_traceback'] = self._source_traceback
             self._loop.call_exception_handler(context)
 
-    cpdef cancel(self):
+
+    property _asyncio_future_blocking:
+        def __get__(self):
+            return self.__asyncio_future_blocking
+
+        def __set__(self, value):
+            self.__asyncio_future_blocking = value
+
+    def cancel(self):
         """Cancel the future and schedule callbacks.
 
         If the future is already done or cancelled, return False.  Otherwise,
@@ -316,11 +334,13 @@ cdef class Future:
 
     def __iter__(self):
         if not self.done():
-            self._asyncio_future_blocking = 1
+            self._asyncio_future_blocking = True
             yield self  # This tells Task to wait for completion.
         assert self.done(), "yield from wasn't used with future"
         return self.result()  # May raise too.
 
-    if compat.PY35:
-        __await__ = __iter__ # make compatible with 'await' expression
+    def __await__(self):
+        return self.__iter__()
 
+
+collections.abc.Awaitable.register(Future)

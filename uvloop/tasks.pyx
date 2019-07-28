@@ -2,13 +2,19 @@
 
 __all__ = ['Task']
 
+import collections.abc
 import inspect
 import weakref
 
-from asyncio import base_tasks
-from asyncio import compat
+
+from . import base_tasks
 from asyncio import coroutines
 from asyncio import futures
+
+try:
+    from asyncio import compat
+except:
+    compat = None
 
 include 'futures.pyx'
 #include 'loop.pxd'
@@ -82,7 +88,7 @@ cdef class Task(Future):
     # On Python 3.3 or older, objects with a destructor that are part of a
     # reference cycle are never destroyed. That's not the case any more on
     # Python 3.4 thanks to the PEP 442.
-    if compat.PY34:
+    if compat and compat.PY34:
         def __del__(self):
             if self._state == futures._PENDING and self._log_destroy_pending:
                 context = {
@@ -201,7 +207,8 @@ cdef class Task(Future):
             else:
                 self.set_result(exc.value)
         except futures.CancelledError:
-            super().cancel()  # I.e., Future.cancel(self).
+
+            Future.cancel(self)  # I.e., Future.cancel(self).
         except Exception as exc:
             self.set_exception(exc)
         except BaseException as exc:
@@ -225,7 +232,7 @@ cdef class Task(Future):
                                 'Task cannot await on itself: {!r}'.format(
                                     self)))
                     else:
-                        result._asyncio_future_blocking = 0
+                        result._asyncio_future_blocking = False
                         result.add_done_callback(self._wakeup)
                         self._fut_waiter = result
                         if self._must_cancel:
@@ -275,13 +282,4 @@ cdef class Task(Future):
         self = None  # Needed to break cycles when an exception occurs.
 
 
-# _PyTask = Task
-#
-#
-# try:
-#     import _asyncio
-# except ImportError:
-#     pass
-# else:
-#     # _CTask is needed for tests.
-#     Task = _CTask = _asyncio.Task
+collections.abc.Awaitable.register(Task)

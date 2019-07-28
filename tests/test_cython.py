@@ -1,5 +1,6 @@
 import asyncio
 
+import uvloop
 from uvloop._testbase import UVTestCase
 
 
@@ -17,8 +18,8 @@ class TestCythonIntegration(UVTestCase):
         self.assertEqual(_test_coroutine_1.__name__, '_test_coroutine_1')
         self.assertTrue(asyncio.iscoroutine(coro))
         fut = asyncio.ensure_future(coro, loop=self.loop)
-        self.assertTrue(isinstance(fut, asyncio.Future))
-        self.assertTrue(isinstance(fut, asyncio.Task))
+        self.assertTrue(isinstance(fut, uvloop.loop.Future))
+        self.assertTrue(isinstance(fut, uvloop.loop.Task))
         fut.cancel()
 
         with self.assertRaises(asyncio.CancelledError):
